@@ -12,7 +12,7 @@ go run .
 go run . --config config.yaml
 
 # Docker
-docker run --rm -p 8080:8080 ghcr.io/null-ptr-exception/oidc-mock
+docker run --rm -p 8080:8080 ghcr.io/rophy/oidc-mock
 ```
 
 Starts on `:8080` with default client (`id: default`, `secret: secret`) and two users. Discovery doc at `http://localhost:8080/.well-known/openid-configuration`.
@@ -44,13 +44,13 @@ Any key in a user object beyond `sub`, `email`, and `name` becomes a claim in th
 
 ## Docker
 
-Published to `ghcr.io/null-ptr-exception/oidc-mock`. Tagged `latest` and `yyyymmdd-<hash>` on each push to master.
+Published to `ghcr.io/rophy/oidc-mock`. Tagged `latest` and `yyyymmdd-<hash>` on each push to master.
 
 ```yaml
 # docker-compose.yaml
 services:
   oidc-mock:
-    image: ghcr.io/null-ptr-exception/oidc-mock:latest
+    image: ghcr.io/rophy/oidc-mock:latest
     ports:
       - "8080:8080"
     volumes:

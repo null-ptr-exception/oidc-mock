@@ -1,4 +1,4 @@
-module github.com/null-ptr-exception/oidc-mock
+module github.com/rophy/oidc-mock
 
 go 1.24.13
 

@@ -49,5 +49,5 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/null-ptr-exception/oidc-mock:${{ steps.tag.outputs.value }}
-            ghcr.io/null-ptr-exception/oidc-mock:latest
+            ghcr.io/rophy/oidc-mock:${{ steps.tag.outputs.value }}
+            ghcr.io/rophy/oidc-mock:latest
