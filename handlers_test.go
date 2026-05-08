@@ -234,6 +234,54 @@ func TestTokenEndpoint_CodeAlreadyConsumed(t *testing.T) {
 	}
 }
 
+func TestTokenEndpoint_BasicAuth(t *testing.T) {
+	srv := newTestServer(t)
+
+	srv.Store.SaveAuthCode("basiccode", AuthCodeData{
+		UserSub:     "user1",
+		ClientID:    "default",
+		RedirectURI: "http://localhost:8080/callback",
+		Nonce:       "n",
+		ExpiresAt:   time.Now().Add(60 * time.Second),
+	})
+
+	form := strings.NewReader("grant_type=authorization_code&code=basiccode&redirect_uri=http://localhost:8080/callback")
+	req := httptest.NewRequest("POST", "/token", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("default", "secret")
+	w := httptest.NewRecorder()
+
+	srv.HandleToken(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp["id_token"] == nil || resp["id_token"] == "" {
+		t.Error("expected id_token")
+	}
+}
+
+func TestTokenEndpoint_BasicAuth_InvalidSecret(t *testing.T) {
+	srv := newTestServer(t)
+
+	form := strings.NewReader("grant_type=authorization_code&code=x&redirect_uri=http://x")
+	req := httptest.NewRequest("POST", "/token", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("default", "wrongsecret")
+	w := httptest.NewRecorder()
+
+	srv.HandleToken(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
 func TestUserinfoEndpoint(t *testing.T) {
 	srv := newTestServer(t)
 

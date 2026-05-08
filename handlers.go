@@ -37,7 +37,7 @@ func (s *Server) HandleDiscovery(w http.ResponseWriter, r *http.Request) {
 		"subject_types_supported":               []string{"public"},
 		"id_token_signing_alg_values_supported": []string{"RS256"},
 		"scopes_supported":                      []string{"openid", "email", "profile"},
-		"token_endpoint_auth_methods_supported": []string{"client_secret_post"},
+		"token_endpoint_auth_methods_supported": []string{"client_secret_basic", "client_secret_post"},
 		"claims_supported":                      []string{"sub", "iss", "aud", "exp", "iat", "nonce", "email", "name"},
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -158,9 +158,13 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	code := r.FormValue("code")
-	clientID := r.FormValue("client_id")
-	clientSecret := r.FormValue("client_secret")
 	redirectURI := r.FormValue("redirect_uri")
+
+	clientID, clientSecret, basicOk := r.BasicAuth()
+	if !basicOk {
+		clientID = r.FormValue("client_id")
+		clientSecret = r.FormValue("client_secret")
+	}
 
 	client := s.findClient(clientID)
 	if client == nil || client.Secret != clientSecret {
