@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	jwt "github.com/golang-jwt/jwt/v5"
 )
 
 //go:embed templates
@@ -140,4 +142,92 @@ func (s *Server) validRedirectURI(c *Client, uri string) bool {
 		}
 	}
 	return false
+}
+
+func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form data", http.StatusBadRequest)
+		return
+	}
+
+	grantType := r.FormValue("grant_type")
+	if grantType != "authorization_code" {
+		jsonError(w, "unsupported_grant_type", http.StatusBadRequest)
+		return
+	}
+
+	code := r.FormValue("code")
+	clientID := r.FormValue("client_id")
+	clientSecret := r.FormValue("client_secret")
+	redirectURI := r.FormValue("redirect_uri")
+
+	client := s.findClient(clientID)
+	if client == nil || client.Secret != clientSecret {
+		jsonError(w, "invalid_client", http.StatusUnauthorized)
+		return
+	}
+
+	codeData, ok := s.Store.ConsumeAuthCode(code)
+	if !ok {
+		jsonError(w, "invalid_grant", http.StatusBadRequest)
+		return
+	}
+	if codeData.ClientID != clientID || codeData.RedirectURI != redirectURI {
+		jsonError(w, "invalid_grant", http.StatusBadRequest)
+		return
+	}
+
+	user := s.findUser(codeData.UserSub)
+	if user == nil {
+		jsonError(w, "invalid_grant", http.StatusBadRequest)
+		return
+	}
+
+	now := time.Now()
+	idTokenClaims := IDTokenClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    s.Config.Issuer,
+			Subject:   user.Sub,
+			Audience:  jwt.ClaimStrings{clientID},
+			ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(now),
+		},
+		Nonce:  codeData.Nonce,
+		Email:  user.Email,
+		Name:   user.Name,
+		Custom: user.Claims,
+	}
+
+	idToken, err := s.KeyPair.SignIDToken(idTokenClaims)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	accessToken := GenerateRandomString(32)
+	s.Store.SaveAccessToken(accessToken, user.Sub)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	json.NewEncoder(w).Encode(map[string]any{
+		"access_token": accessToken,
+		"token_type":   "Bearer",
+		"expires_in":   3600,
+		"id_token":     idToken,
+	})
+}
+
+func (s *Server) findUser(sub string) *User {
+	for i := range s.Config.Users {
+		if s.Config.Users[i].Sub == sub {
+			return &s.Config.Users[i]
+		}
+	}
+	return nil
+}
+
+func jsonError(w http.ResponseWriter, errCode string, status int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]string{"error": errCode})
 }
