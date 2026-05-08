@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -86,5 +88,64 @@ func TestJWKSEndpoint(t *testing.T) {
 	}
 	if key["use"] != "sig" {
 		t.Errorf("expected use=sig, got %v", key["use"])
+	}
+}
+
+func TestAuthorizeEndpoint_InvalidClient(t *testing.T) {
+	srv := newTestServer(t)
+
+	req := httptest.NewRequest("GET", "/authorize?client_id=bad&redirect_uri=http://example.com/cb&response_type=code&scope=openid", nil)
+	w := httptest.NewRecorder()
+
+	srv.HandleAuthorize(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestAuthorizeEndpoint_RendersPicker(t *testing.T) {
+	srv := newTestServer(t)
+
+	req := httptest.NewRequest("GET", "/authorize?client_id=default&redirect_uri=http://localhost:8080/callback&response_type=code&scope=openid&state=xyz&nonce=abc", nil)
+	w := httptest.NewRecorder()
+
+	srv.HandleAuthorize(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "Alice") {
+		t.Error("expected Alice in picker")
+	}
+	if !strings.Contains(body, "Bob") {
+		t.Error("expected Bob in picker")
+	}
+}
+
+func TestAuthorizeCallback_RedirectsWithCode(t *testing.T) {
+	srv := newTestServer(t)
+
+	form := strings.NewReader("sub=user1&client_id=default&redirect_uri=http://localhost:8080/callback&state=xyz&nonce=abc")
+	req := httptest.NewRequest("POST", "/authorize/callback", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	srv.HandleAuthorizeCallback(w, req)
+
+	if w.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d", w.Code)
+	}
+	loc := w.Header().Get("Location")
+	u, err := url.Parse(loc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Query().Get("code") == "" {
+		t.Error("expected code in redirect")
+	}
+	if u.Query().Get("state") != "xyz" {
+		t.Errorf("expected state=xyz, got %s", u.Query().Get("state"))
 	}
 }
