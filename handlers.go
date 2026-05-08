@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	jwt "github.com/golang-jwt/jwt/v5"
@@ -224,6 +225,41 @@ func (s *Server) findUser(sub string) *User {
 		}
 	}
 	return nil
+}
+
+func (s *Server) HandleUserinfo(w http.ResponseWriter, r *http.Request) {
+	auth := r.Header.Get("Authorization")
+	if !strings.HasPrefix(auth, "Bearer ") {
+		w.Header().Set("WWW-Authenticate", "Bearer")
+		http.Error(w, "missing bearer token", http.StatusUnauthorized)
+		return
+	}
+	token := strings.TrimPrefix(auth, "Bearer ")
+
+	sub, ok := s.Store.GetUserByAccessToken(token)
+	if !ok {
+		w.Header().Set("WWW-Authenticate", "Bearer error=\"invalid_token\"")
+		http.Error(w, "invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	user := s.findUser(sub)
+	if user == nil {
+		http.Error(w, "user not found", http.StatusInternalServerError)
+		return
+	}
+
+	claims := map[string]any{
+		"sub":   user.Sub,
+		"email": user.Email,
+		"name":  user.Name,
+	}
+	for k, v := range user.Claims {
+		claims[k] = v
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(claims)
 }
 
 func jsonError(w http.ResponseWriter, errCode string, status int) {

@@ -233,3 +233,60 @@ func TestTokenEndpoint_CodeAlreadyConsumed(t *testing.T) {
 		t.Errorf("second exchange: expected 400, got %d", w2.Code)
 	}
 }
+
+func TestUserinfoEndpoint(t *testing.T) {
+	srv := newTestServer(t)
+
+	srv.Store.SaveAccessToken("atok", "user1")
+
+	req := httptest.NewRequest("GET", "/userinfo", nil)
+	req.Header.Set("Authorization", "Bearer atok")
+	w := httptest.NewRecorder()
+
+	srv.HandleUserinfo(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var claims map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &claims); err != nil {
+		t.Fatal(err)
+	}
+	if claims["sub"] != "user1" {
+		t.Errorf("expected sub=user1, got %v", claims["sub"])
+	}
+	if claims["email"] != "alice@example.com" {
+		t.Errorf("expected email, got %v", claims["email"])
+	}
+	if claims["name"] != "Alice" {
+		t.Errorf("expected name=Alice, got %v", claims["name"])
+	}
+}
+
+func TestUserinfoEndpoint_InvalidToken(t *testing.T) {
+	srv := newTestServer(t)
+
+	req := httptest.NewRequest("GET", "/userinfo", nil)
+	req.Header.Set("Authorization", "Bearer badtoken")
+	w := httptest.NewRecorder()
+
+	srv.HandleUserinfo(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestUserinfoEndpoint_MissingToken(t *testing.T) {
+	srv := newTestServer(t)
+
+	req := httptest.NewRequest("GET", "/userinfo", nil)
+	w := httptest.NewRecorder()
+
+	srv.HandleUserinfo(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
