@@ -1,0 +1,86 @@
+package main
+
+import (
+	"os"
+	"testing"
+)
+
+func TestDefaultConfig(t *testing.T) {
+	cfg := DefaultConfig()
+
+	if cfg.Port != 8080 {
+		t.Errorf("expected port 8080, got %d", cfg.Port)
+	}
+	if cfg.Issuer != "http://localhost:8080" {
+		t.Errorf("expected default issuer, got %s", cfg.Issuer)
+	}
+	if len(cfg.Clients) != 1 {
+		t.Fatalf("expected 1 default client, got %d", len(cfg.Clients))
+	}
+	if cfg.Clients[0].ID != "default" || cfg.Clients[0].Secret != "secret" {
+		t.Errorf("unexpected default client: %+v", cfg.Clients[0])
+	}
+	if len(cfg.Users) != 2 {
+		t.Fatalf("expected 2 default users, got %d", len(cfg.Users))
+	}
+	if cfg.Users[0].Sub != "user1" || cfg.Users[0].Email != "alice@example.com" {
+		t.Errorf("unexpected first user: %+v", cfg.Users[0])
+	}
+}
+
+func TestLoadConfigFromFile(t *testing.T) {
+	yamlContent := `
+port: 9090
+issuer: http://myapp:9090
+clients:
+  - id: my-app
+    secret: my-secret
+    redirect_uris:
+      - http://localhost:3000/callback
+users:
+  - sub: u1
+    email: test@test.com
+    name: Tester
+    department: engineering
+`
+	tmpFile := t.TempDir() + "/config.yaml"
+	if err := os.WriteFile(tmpFile, []byte(yamlContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadConfig(tmpFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Port != 9090 {
+		t.Errorf("expected port 9090, got %d", cfg.Port)
+	}
+	if cfg.Issuer != "http://myapp:9090" {
+		t.Errorf("expected issuer http://myapp:9090, got %s", cfg.Issuer)
+	}
+	if len(cfg.Clients) != 1 || cfg.Clients[0].ID != "my-app" {
+		t.Errorf("unexpected clients: %+v", cfg.Clients)
+	}
+	if len(cfg.Users) != 1 || cfg.Users[0].Sub != "u1" {
+		t.Errorf("unexpected users: %+v", cfg.Users)
+	}
+	if cfg.Users[0].Claims["department"] != "engineering" {
+		t.Errorf("expected custom claim department=engineering, got %v", cfg.Users[0].Claims["department"])
+	}
+}
+
+func TestEnvVarOverrides(t *testing.T) {
+	t.Setenv("OIDC_PORT", "3333")
+	t.Setenv("OIDC_ISSUER", "http://custom:3333")
+
+	cfg, err := LoadConfig("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Port != 3333 {
+		t.Errorf("expected port 3333, got %d", cfg.Port)
+	}
+	if cfg.Issuer != "http://custom:3333" {
+		t.Errorf("expected issuer http://custom:3333, got %s", cfg.Issuer)
+	}
+}
