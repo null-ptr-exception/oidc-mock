@@ -77,9 +77,6 @@ func LoadConfig(path string) (Config, error) {
 			cfg.Port = port
 		}
 	}
-	if v := os.Getenv("OIDC_ISSUER"); v != "" {
-		cfg.Issuer = v
-	}
 
 	return cfg, nil
 }

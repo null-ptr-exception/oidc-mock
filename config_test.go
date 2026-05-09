@@ -139,7 +139,6 @@ func TestInlineConfigTakesPriority(t *testing.T) {
 
 func TestEnvVarOverrides(t *testing.T) {
 	t.Setenv("OIDC_PORT", "3333")
-	t.Setenv("OIDC_ISSUER", "http://custom:3333")
 
 	cfg, err := LoadConfig("")
 	if err != nil {
@@ -147,8 +146,5 @@ func TestEnvVarOverrides(t *testing.T) {
 	}
 	if cfg.Port != 3333 {
 		t.Errorf("expected port 3333, got %d", cfg.Port)
-	}
-	if cfg.Issuer != "http://custom:3333" {
-		t.Errorf("expected issuer http://custom:3333, got %s", cfg.Issuer)
 	}
 }

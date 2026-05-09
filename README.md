@@ -4,22 +4,37 @@ Mock OIDC provider for local development. Implements the Authorization Code flow
 
 ## Quick Start
 
-```bash
-# From source
-go run .
-
-# With config
-go run . --config config.yaml
-
-# Docker
-docker run --rm -p 8080:8080 ghcr.io/rophy/oidc-mock
+```console
+$ docker run --rm -p 8080:8080 ghcr.io/rophy/oidc-mock
+Runtime OIDC_CONFIG:
+---
+port: 8080
+issuer: http://localhost:8080
+clients:
+    - id: default
+      secret: secret
+      redirect_uris:
+        - http://localhost:8080/callback
+users:
+    - sub: user1
+      email: alice@example.com
+      name: Alice
+      roles:
+        - admin
+    - sub: user2
+      email: bob@example.com
+      name: Bob
+      roles:
+        - viewer
+---
+oidc-mock listening on :8080
 ```
 
-Starts on `:8080` with default client (`id: default`, `secret: secret`) and two users. Discovery doc at `http://localhost:8080/.well-known/openid-configuration`.
+Discovery doc at `http://localhost:8080/.well-known/openid-configuration`.
 
 ## Configuration
 
-Config via `--config <file>` flag, `OIDC_CONFIG_FILE` env var (file path), or `OIDC_CONFIG` env var (inline YAML). `OIDC_PORT` and `OIDC_ISSUER` override the corresponding fields.
+Config via `OIDC_CONFIG` env var (inline YAML), `OIDC_CONFIG_FILE` env var (file path), or `--config <file>` flag. `OIDC_PORT` overrides the port. See Quick Start for defaults.
 
 ```yaml
 port: 8080
@@ -42,12 +57,31 @@ users:
 
 Any key in a user object beyond `sub`, `email`, and `name` becomes a claim in the ID token and `/userinfo` response.
 
-## Docker
-
-Published to `ghcr.io/rophy/oidc-mock`. Tagged `latest` and `yyyymmdd-<hash>` on each push to master.
+### docker-compose with inline config
 
 ```yaml
-# docker-compose.yaml
+services:
+  oidc-mock:
+    image: ghcr.io/rophy/oidc-mock:latest
+    ports:
+      - "8080:8080"
+    environment:
+      OIDC_CONFIG: |
+        clients:
+          - id: my-app
+            secret: my-secret
+            redirect_uris:
+              - http://localhost:3000/callback
+        users:
+          - sub: user1
+            email: alice@example.com
+            name: Alice
+            roles: [admin]
+```
+
+### docker-compose with config file
+
+```yaml
 services:
   oidc-mock:
     image: ghcr.io/rophy/oidc-mock:latest
@@ -55,5 +89,15 @@ services:
       - "8080:8080"
     volumes:
       - ./config.yaml:/config.yaml
-    command: ["--config", "/config.yaml"]
+    environment:
+      OIDC_CONFIG_FILE: /config.yaml
 ```
+
+## Building from source
+
+```bash
+go run .
+go run . --config config.yaml
+```
+
+Image published to `ghcr.io/rophy/oidc-mock`, tagged `latest` and `yyyymmdd-<hash>` on each push to master.
