@@ -122,18 +122,15 @@ issuer: http://filecfg:6666
 	}
 }
 
-func TestInlineConfigTakesPriority(t *testing.T) {
+func TestMultipleConfigSourcesError(t *testing.T) {
 	tmpFile := t.TempDir() + "/config.yaml"
 	os.WriteFile(tmpFile, []byte("port: 1111"), 0644)
 	t.Setenv("OIDC_CONFIG_FILE", tmpFile)
 	t.Setenv("OIDC_CONFIG", "port: 2222")
 
-	cfg, err := LoadConfig("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Port != 2222 {
-		t.Errorf("expected port 2222 (inline wins), got %d", cfg.Port)
+	_, err := LoadConfig("")
+	if err == nil {
+		t.Fatal("expected error when both OIDC_CONFIG and OIDC_CONFIG_FILE are set")
 	}
 }
 

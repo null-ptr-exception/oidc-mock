@@ -34,7 +34,13 @@ Discovery doc at `http://localhost:8080/.well-known/openid-configuration`.
 
 ## Configuration
 
-Override defaults (see Getting Started) via `OIDC_CONFIG` env var (inline YAML), `OIDC_CONFIG_FILE` env var (file path), or `--config <file>` flag. `OIDC_PORT` overrides the port.
+Override defaults (see Getting Started) using exactly one of:
+
+- `OIDC_CONFIG` env var — inline YAML
+- `OIDC_CONFIG_FILE` env var — path to a YAML file
+- `--config <file>` flag
+
+Setting more than one is an error. `OIDC_PORT` overrides the port independently.
 
 Any key in a user object beyond `sub`, `email`, and `name` becomes a claim in the ID token and `/userinfo` response.
 

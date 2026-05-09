@@ -48,16 +48,34 @@ func DefaultConfig() Config {
 func LoadConfig(path string) (Config, error) {
 	cfg := DefaultConfig()
 
+	hasInline := os.Getenv("OIDC_CONFIG") != ""
+	hasFile := os.Getenv("OIDC_CONFIG_FILE") != ""
+	hasFlag := path != ""
+
+	sources := 0
+	if hasInline {
+		sources++
+	}
+	if hasFile {
+		sources++
+	}
+	if hasFlag {
+		sources++
+	}
+	if sources > 1 {
+		return Config{}, fmt.Errorf("only one config source allowed, but got multiple: set exactly one of OIDC_CONFIG, OIDC_CONFIG_FILE, or --config")
+	}
+
 	var data []byte
-	if v := os.Getenv("OIDC_CONFIG"); v != "" {
-		data = []byte(v)
-	} else if v := os.Getenv("OIDC_CONFIG_FILE"); v != "" {
+	if hasInline {
+		data = []byte(os.Getenv("OIDC_CONFIG"))
+	} else if hasFile {
 		var err error
-		data, err = os.ReadFile(v)
+		data, err = os.ReadFile(os.Getenv("OIDC_CONFIG_FILE"))
 		if err != nil {
 			return Config{}, err
 		}
-	} else if path != "" {
+	} else if hasFlag {
 		var err error
 		data, err = os.ReadFile(path)
 		if err != nil {
