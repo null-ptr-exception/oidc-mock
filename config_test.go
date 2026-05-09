@@ -69,6 +69,74 @@ users:
 	}
 }
 
+func TestInlineConfigViaEnvVar(t *testing.T) {
+	t.Setenv("OIDC_CONFIG", `
+port: 7777
+issuer: http://inline:7777
+clients:
+  - id: inline-app
+    secret: inline-secret
+    redirect_uris:
+      - http://localhost:7777/callback
+users:
+  - sub: u1
+    email: inline@test.com
+    name: Inline User
+`)
+
+	cfg, err := LoadConfig("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Port != 7777 {
+		t.Errorf("expected port 7777, got %d", cfg.Port)
+	}
+	if cfg.Issuer != "http://inline:7777" {
+		t.Errorf("expected issuer http://inline:7777, got %s", cfg.Issuer)
+	}
+	if len(cfg.Clients) != 1 || cfg.Clients[0].ID != "inline-app" {
+		t.Errorf("unexpected clients: %+v", cfg.Clients)
+	}
+	if len(cfg.Users) != 1 || cfg.Users[0].Email != "inline@test.com" {
+		t.Errorf("unexpected users: %+v", cfg.Users)
+	}
+}
+
+func TestConfigFileViaEnvVar(t *testing.T) {
+	yamlContent := `
+port: 6666
+issuer: http://filecfg:6666
+`
+	tmpFile := t.TempDir() + "/config.yaml"
+	if err := os.WriteFile(tmpFile, []byte(yamlContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OIDC_CONFIG_FILE", tmpFile)
+
+	cfg, err := LoadConfig("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Port != 6666 {
+		t.Errorf("expected port 6666, got %d", cfg.Port)
+	}
+}
+
+func TestInlineConfigTakesPriority(t *testing.T) {
+	tmpFile := t.TempDir() + "/config.yaml"
+	os.WriteFile(tmpFile, []byte("port: 1111"), 0644)
+	t.Setenv("OIDC_CONFIG_FILE", tmpFile)
+	t.Setenv("OIDC_CONFIG", "port: 2222")
+
+	cfg, err := LoadConfig("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Port != 2222 {
+		t.Errorf("expected port 2222 (inline wins), got %d", cfg.Port)
+	}
+}
+
 func TestEnvVarOverrides(t *testing.T) {
 	t.Setenv("OIDC_PORT", "3333")
 	t.Setenv("OIDC_ISSUER", "http://custom:3333")

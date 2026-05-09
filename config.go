@@ -48,11 +48,24 @@ func DefaultConfig() Config {
 func LoadConfig(path string) (Config, error) {
 	cfg := DefaultConfig()
 
-	if path != "" {
-		data, err := os.ReadFile(path)
+	var data []byte
+	if v := os.Getenv("OIDC_CONFIG"); v != "" {
+		data = []byte(v)
+	} else if v := os.Getenv("OIDC_CONFIG_FILE"); v != "" {
+		var err error
+		data, err = os.ReadFile(v)
 		if err != nil {
 			return Config{}, err
 		}
+	} else if path != "" {
+		var err error
+		data, err = os.ReadFile(path)
+		if err != nil {
+			return Config{}, err
+		}
+	}
+
+	if data != nil {
 		if err := yaml.Unmarshal(data, &cfg); err != nil {
 			return Config{}, err
 		}

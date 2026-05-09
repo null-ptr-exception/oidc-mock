@@ -19,7 +19,7 @@ Starts on `:8080` with default client (`id: default`, `secret: secret`) and two 
 
 ## Configuration
 
-Optional YAML config file via `--config` flag or `OIDC_CONFIG` env var. Env vars `OIDC_PORT` and `OIDC_ISSUER` override the corresponding config fields.
+Config via `--config <file>` flag, `OIDC_CONFIG_FILE` env var (file path), or `OIDC_CONFIG` env var (inline YAML). `OIDC_PORT` and `OIDC_ISSUER` override the corresponding fields.
 
 ```yaml
 port: 8080

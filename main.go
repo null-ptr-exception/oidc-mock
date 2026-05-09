@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 )
 
 func main() {
-	configPath := flag.String("config", os.Getenv("OIDC_CONFIG"), "path to config YAML file")
+	configPath := flag.String("config", "", "path to config YAML file")
 	flag.Parse()
 
 	cfg, err := LoadConfig(*configPath)
