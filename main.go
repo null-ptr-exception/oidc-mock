@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 )
 
 func main() {
@@ -36,7 +37,26 @@ func main() {
 	mux.HandleFunc("GET /userinfo", srv.HandleUserinfo)
 
 	addr := fmt.Sprintf(":%d", cfg.Port)
-	log.Printf("oidc-mock listening on %s (issuer: %s)", addr, cfg.Issuer)
+	log.Printf("oidc-mock listening on %s", addr)
+	log.Printf("  issuer:  %s", cfg.Issuer)
+	log.Printf("  clients:")
+	for _, c := range cfg.Clients {
+		log.Printf("    - %s (redirect: %s)", c.ID, strings.Join(c.RedirectURIs, ", "))
+	}
+	log.Printf("  users:")
+	for _, u := range cfg.Users {
+		line := fmt.Sprintf("    - %s <%s>", u.Name, u.Email)
+		if roles, ok := u.Claims["roles"]; ok {
+			if rs, ok := roles.([]any); ok {
+				parts := make([]string, len(rs))
+				for i, r := range rs {
+					parts[i] = fmt.Sprint(r)
+				}
+				line += fmt.Sprintf(" [%s]", strings.Join(parts, ", "))
+			}
+		}
+		log.Printf("%s", line)
+	}
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatal(err)
 	}
