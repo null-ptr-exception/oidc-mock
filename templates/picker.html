@@ -28,6 +28,7 @@
             <input type="hidden" name="redirect_uri" value="{{$.RedirectURI}}">
             <input type="hidden" name="state" value="{{$.State}}">
             <input type="hidden" name="nonce" value="{{$.Nonce}}">
+            <input type="hidden" name="scope" value="{{$.Scope}}">
             <button type="submit" class="user-card">
                 <div class="user-name">{{.Name}}</div>
                 <div class="user-email">{{.Email}}</div>

@@ -12,25 +12,32 @@ type AuthCodeData struct {
 	ClientID    string
 	RedirectURI string
 	Nonce       string
+	Scope       string
 	ExpiresAt   time.Time
+}
+
+type AccessTokenData struct {
+	UserSub string
+	Scope   string
 }
 
 type RefreshTokenData struct {
 	UserSub  string
 	ClientID string
+	Scope    string
 }
 
 type Store struct {
 	mu            sync.Mutex
 	authCodes     map[string]AuthCodeData
-	accessTokens  map[string]string // token -> user sub
+	accessTokens  map[string]AccessTokenData
 	refreshTokens map[string]RefreshTokenData
 }
 
 func NewStore() *Store {
 	return &Store{
 		authCodes:     make(map[string]AuthCodeData),
-		accessTokens:  make(map[string]string),
+		accessTokens:  make(map[string]AccessTokenData),
 		refreshTokens: make(map[string]RefreshTokenData),
 	}
 }
@@ -53,17 +60,17 @@ func (s *Store) ConsumeAuthCode(code string) (AuthCodeData, bool) {
 	return data, true
 }
 
-func (s *Store) SaveAccessToken(token string, userSub string) {
+func (s *Store) SaveAccessToken(token string, data AccessTokenData) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.accessTokens[token] = userSub
+	s.accessTokens[token] = data
 }
 
-func (s *Store) GetUserByAccessToken(token string) (string, bool) {
+func (s *Store) GetAccessToken(token string) (AccessTokenData, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	sub, ok := s.accessTokens[token]
-	return sub, ok
+	data, ok := s.accessTokens[token]
+	return data, ok
 }
 
 func (s *Store) SaveRefreshToken(token string, data RefreshTokenData) {

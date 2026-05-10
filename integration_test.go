@@ -38,7 +38,7 @@ func TestFullAuthCodeFlow(t *testing.T) {
 	srv.Config.Clients[0].RedirectURIs = []string{ts.URL + "/callback"}
 
 	// Step 1: Hit /authorize — should get 200 with picker HTML
-	authURL := ts.URL + "/authorize?client_id=default&redirect_uri=" + url.QueryEscape(ts.URL+"/callback") + "&response_type=code&scope=openid&state=teststate&nonce=testnonce"
+	authURL := ts.URL + "/authorize?client_id=default&redirect_uri=" + url.QueryEscape(ts.URL+"/callback") + "&response_type=code&scope=openid+email+profile+offline_access&state=teststate&nonce=testnonce"
 	resp, err := http.Get(authURL)
 	if err != nil {
 		t.Fatal(err)
@@ -55,6 +55,7 @@ func TestFullAuthCodeFlow(t *testing.T) {
 		"redirect_uri": {ts.URL + "/callback"},
 		"state":        {"teststate"},
 		"nonce":        {"testnonce"},
+		"scope":        {"openid email profile offline_access"},
 	}
 	client := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse

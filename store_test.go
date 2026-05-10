@@ -48,17 +48,20 @@ func TestExpiredAuthCode(t *testing.T) {
 func TestAccessTokenStore(t *testing.T) {
 	s := NewStore()
 
-	s.SaveAccessToken("tok123", "user1")
+	s.SaveAccessToken("tok123", AccessTokenData{UserSub: "user1", Scope: "openid email profile"})
 
-	sub, ok := s.GetUserByAccessToken("tok123")
+	data, ok := s.GetAccessToken("tok123")
 	if !ok {
 		t.Fatal("expected to find access token")
 	}
-	if sub != "user1" {
-		t.Errorf("expected user1, got %s", sub)
+	if data.UserSub != "user1" {
+		t.Errorf("expected user1, got %s", data.UserSub)
+	}
+	if data.Scope != "openid email profile" {
+		t.Errorf("expected scope 'openid email profile', got %s", data.Scope)
 	}
 
-	_, ok = s.GetUserByAccessToken("nonexistent")
+	_, ok = s.GetAccessToken("nonexistent")
 	if ok {
 		t.Fatal("expected nonexistent token to fail")
 	}

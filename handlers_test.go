@@ -393,7 +393,7 @@ func TestTokenEndpoint_BasicAuth_InvalidSecret(t *testing.T) {
 func TestUserinfoEndpoint(t *testing.T) {
 	srv := newTestServer(t)
 
-	srv.Store.SaveAccessToken("atok", "user1")
+	srv.Store.SaveAccessToken("atok", AccessTokenData{UserSub: "user1", Scope: "openid email profile"})
 
 	req := httptest.NewRequest("GET", "/userinfo", nil)
 	req.Header.Set("Authorization", "Bearer atok")
@@ -428,7 +428,7 @@ func TestUserinfoEndpoint(t *testing.T) {
 func TestUserinfoEndpoint_CustomClaims(t *testing.T) {
 	srv := newTestServer(t)
 
-	srv.Store.SaveAccessToken("atok", "user1")
+	srv.Store.SaveAccessToken("atok", AccessTokenData{UserSub: "user1", Scope: "openid email profile"})
 
 	req := httptest.NewRequest("GET", "/userinfo", nil)
 	req.Header.Set("Authorization", "Bearer atok")
@@ -461,7 +461,7 @@ func TestUserinfoEndpoint_CustomClaims(t *testing.T) {
 func TestUserinfoEndpoint_UserNotFound(t *testing.T) {
 	srv := newTestServer(t)
 
-	srv.Store.SaveAccessToken("atok", "nonexistent-user")
+	srv.Store.SaveAccessToken("atok", AccessTokenData{UserSub: "nonexistent-user", Scope: "openid"})
 
 	req := httptest.NewRequest("GET", "/userinfo", nil)
 	req.Header.Set("Authorization", "Bearer atok")
@@ -541,7 +541,7 @@ func TestUserinfoEndpoint_MissingToken(t *testing.T) {
 func TestUserinfoEndpoint_POSTNotSupported(t *testing.T) {
 	srv := newTestServer(t)
 
-	srv.Store.SaveAccessToken("atok", "user1")
+	srv.Store.SaveAccessToken("atok", AccessTokenData{UserSub: "user1", Scope: "openid email profile"})
 
 	req := httptest.NewRequest("POST", "/userinfo", strings.NewReader("access_token=atok"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")

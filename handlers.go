@@ -69,6 +69,7 @@ type pickerData struct {
 	RedirectURI string
 	State       string
 	Nonce       string
+	Scope       string
 }
 
 func (s *Server) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
@@ -76,6 +77,7 @@ func (s *Server) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	redirectURI := r.URL.Query().Get("redirect_uri")
 	state := r.URL.Query().Get("state")
 	nonce := r.URL.Query().Get("nonce")
+	scope := r.URL.Query().Get("scope")
 
 	responseType := r.URL.Query().Get("response_type")
 	if responseType != "code" {
@@ -100,6 +102,7 @@ func (s *Server) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 		RedirectURI: redirectURI,
 		State:       state,
 		Nonce:       nonce,
+		Scope:       scope,
 	})
 }
 
@@ -114,6 +117,7 @@ func (s *Server) HandleAuthorizeCallback(w http.ResponseWriter, r *http.Request)
 	redirectURI := r.FormValue("redirect_uri")
 	state := r.FormValue("state")
 	nonce := r.FormValue("nonce")
+	scope := r.FormValue("scope")
 
 	code := GenerateRandomString(16)
 	s.Store.SaveAuthCode(code, AuthCodeData{
@@ -121,6 +125,7 @@ func (s *Server) HandleAuthorizeCallback(w http.ResponseWriter, r *http.Request)
 		ClientID:    clientID,
 		RedirectURI: redirectURI,
 		Nonce:       nonce,
+		Scope:       scope,
 		ExpiresAt:   time.Now().Add(60 * time.Second),
 	})
 
@@ -172,7 +177,7 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var userSub, nonce string
+	var userSub, nonce, scope string
 
 	switch grantType {
 	case "authorization_code":
@@ -190,6 +195,7 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 		}
 		userSub = codeData.UserSub
 		nonce = codeData.Nonce
+		scope = codeData.Scope
 
 	case "refresh_token":
 		rt := r.FormValue("refresh_token")
@@ -203,6 +209,7 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		userSub = rtData.UserSub
+		scope = rtData.Scope
 
 	default:
 		jsonError(w, "unsupported_grant_type", http.StatusBadRequest)
@@ -237,12 +244,13 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	accessToken := GenerateRandomString(32)
-	s.Store.SaveAccessToken(accessToken, user.Sub)
+	s.Store.SaveAccessToken(accessToken, AccessTokenData{UserSub: user.Sub, Scope: scope})
 
 	refreshToken := GenerateRandomString(32)
 	s.Store.SaveRefreshToken(refreshToken, RefreshTokenData{
 		UserSub:  user.Sub,
 		ClientID: clientID,
+		Scope:    scope,
 	})
 
 	w.Header().Set("Content-Type", "application/json")
@@ -279,14 +287,14 @@ func (s *Server) HandleUserinfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sub, ok := s.Store.GetUserByAccessToken(token)
+	data, ok := s.Store.GetAccessToken(token)
 	if !ok {
 		w.Header().Set("WWW-Authenticate", "Bearer error=\"invalid_token\"")
 		http.Error(w, "invalid token", http.StatusUnauthorized)
 		return
 	}
 
-	user := s.findUser(sub)
+	user := s.findUser(data.UserSub)
 	if user == nil {
 		http.Error(w, "user not found", http.StatusInternalServerError)
 		return
