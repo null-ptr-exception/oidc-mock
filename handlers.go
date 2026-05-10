@@ -249,6 +249,14 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Generate access token first
+	accessToken := GenerateRandomString(32)
+	s.Store.SaveAccessToken(accessToken, AccessTokenData{UserSub: user.Sub, Scope: scope})
+
+	// Compute at_hash: SHA-256 hash of access token, left half, base64url-encoded
+	atHashBytes := sha256.Sum256([]byte(accessToken))
+	atHash := base64.RawURLEncoding.EncodeToString(atHashBytes[:16])
+
 	now := time.Now()
 	idTokenClaims := IDTokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -261,6 +269,7 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 		Nonce:  nonce,
 		Email:  user.Email,
 		Name:   user.Name,
+		AtHash: atHash,
 		Custom: user.Claims,
 	}
 
@@ -269,9 +278,6 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-
-	accessToken := GenerateRandomString(32)
-	s.Store.SaveAccessToken(accessToken, AccessTokenData{UserSub: user.Sub, Scope: scope})
 
 	resp := map[string]any{
 		"access_token": accessToken,

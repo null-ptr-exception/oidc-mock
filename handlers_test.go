@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func newTestServer(t *testing.T) *Server {
@@ -737,5 +741,55 @@ func TestUserinfoEndpoint_POSTNotSupported(t *testing.T) {
 	}
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401 for POST without Authorization header, got %d", w.Code)
+	}
+}
+
+func TestTokenEndpoint_IDToken_ContainsAtHash(t *testing.T) {
+	srv := newTestServer(t)
+
+	srv.Store.SaveAuthCode("hashcode", AuthCodeData{
+		UserSub:     "user1",
+		ClientID:    "default",
+		RedirectURI: "http://localhost:8080/callback",
+		Nonce:       "n",
+		Scope:       "openid email profile",
+		ExpiresAt:   time.Now().Add(60 * time.Second),
+	})
+
+	form := strings.NewReader("grant_type=authorization_code&code=hashcode&client_id=default&client_secret=secret&redirect_uri=http://localhost:8080/callback")
+	req := httptest.NewRequest("POST", "/token", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	srv.HandleToken(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+
+	accessToken := resp["access_token"].(string)
+	idTokenStr := resp["id_token"].(string)
+
+	parsed, err := jwt.Parse(idTokenStr, func(token *jwt.Token) (any, error) {
+		return &srv.KeyPair.PrivateKey.PublicKey, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims := parsed.Claims.(jwt.MapClaims)
+
+	atHash, ok := claims["at_hash"].(string)
+	if !ok || atHash == "" {
+		t.Fatal("expected at_hash claim in id_token")
+	}
+
+	// Verify: left half of SHA-256 of access_token, base64url-encoded
+	h := sha256.Sum256([]byte(accessToken))
+	expectedAtHash := base64.RawURLEncoding.EncodeToString(h[:16])
+	if atHash != expectedAtHash {
+		t.Errorf("at_hash mismatch: got %s, expected %s", atHash, expectedAtHash)
 	}
 }

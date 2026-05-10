@@ -36,6 +36,7 @@ type IDTokenClaims struct {
 	Nonce  string         `json:"nonce,omitempty"`
 	Email  string         `json:"email,omitempty"`
 	Name   string         `json:"name,omitempty"`
+	AtHash string         `json:"at_hash,omitempty"`
 	Custom map[string]any `json:"-"`
 }
 
