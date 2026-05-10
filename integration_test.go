@@ -142,4 +142,53 @@ func TestFullAuthCodeFlow(t *testing.T) {
 	if userInfo["email"] != "alice@example.com" {
 		t.Errorf("userinfo email: expected alice@example.com, got %v", userInfo["email"])
 	}
+
+	// Step 6: Use refresh token to get new tokens
+	refreshToken, ok := tokenResp["refresh_token"].(string)
+	if !ok || refreshToken == "" {
+		t.Fatal("expected refresh_token in token response")
+	}
+
+	refreshForm := url.Values{
+		"grant_type":    {"refresh_token"},
+		"refresh_token": {refreshToken},
+		"client_id":     {"default"},
+		"client_secret": {"secret"},
+	}
+	resp, err = http.PostForm(ts.URL+"/token", refreshForm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("refresh: expected 200, got %d", resp.StatusCode)
+	}
+	var refreshResp map[string]any
+	json.NewDecoder(resp.Body).Decode(&refreshResp)
+	resp.Body.Close()
+
+	newAccessToken, ok := refreshResp["access_token"].(string)
+	if !ok || newAccessToken == "" {
+		t.Fatal("expected new access_token from refresh")
+	}
+	if refreshResp["id_token"] == nil || refreshResp["id_token"] == "" {
+		t.Fatal("expected new id_token from refresh")
+	}
+
+	// Step 7: Verify the new access token works with /userinfo
+	req, _ = http.NewRequest("GET", ts.URL+"/userinfo", nil)
+	req.Header.Set("Authorization", "Bearer "+newAccessToken)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("userinfo after refresh: expected 200, got %d", resp.StatusCode)
+	}
+	var refreshedUserInfo map[string]any
+	json.NewDecoder(resp.Body).Decode(&refreshedUserInfo)
+	resp.Body.Close()
+
+	if refreshedUserInfo["sub"] != "user1" {
+		t.Errorf("userinfo after refresh: expected sub=user1, got %v", refreshedUserInfo["sub"])
+	}
 }

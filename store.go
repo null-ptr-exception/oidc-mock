@@ -15,16 +15,23 @@ type AuthCodeData struct {
 	ExpiresAt   time.Time
 }
 
+type RefreshTokenData struct {
+	UserSub  string
+	ClientID string
+}
+
 type Store struct {
-	mu           sync.Mutex
-	authCodes    map[string]AuthCodeData
-	accessTokens map[string]string // token -> user sub
+	mu            sync.Mutex
+	authCodes     map[string]AuthCodeData
+	accessTokens  map[string]string // token -> user sub
+	refreshTokens map[string]RefreshTokenData
 }
 
 func NewStore() *Store {
 	return &Store{
-		authCodes:    make(map[string]AuthCodeData),
-		accessTokens: make(map[string]string),
+		authCodes:     make(map[string]AuthCodeData),
+		accessTokens:  make(map[string]string),
+		refreshTokens: make(map[string]RefreshTokenData),
 	}
 }
 
@@ -57,6 +64,19 @@ func (s *Store) GetUserByAccessToken(token string) (string, bool) {
 	defer s.mu.Unlock()
 	sub, ok := s.accessTokens[token]
 	return sub, ok
+}
+
+func (s *Store) SaveRefreshToken(token string, data RefreshTokenData) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.refreshTokens[token] = data
+}
+
+func (s *Store) GetRefreshToken(token string) (RefreshTokenData, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	data, ok := s.refreshTokens[token]
+	return data, ok
 }
 
 func GenerateRandomString(n int) string {

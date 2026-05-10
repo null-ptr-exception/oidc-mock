@@ -186,6 +186,85 @@ func TestTokenEndpoint_ValidExchange(t *testing.T) {
 	if resp["access_token"] == nil || resp["access_token"] == "" {
 		t.Error("expected access_token")
 	}
+	if resp["refresh_token"] == nil || resp["refresh_token"] == "" {
+		t.Error("expected refresh_token")
+	}
+}
+
+func TestTokenEndpoint_RefreshToken(t *testing.T) {
+	srv := newTestServer(t)
+
+	srv.Store.SaveRefreshToken("rt1", RefreshTokenData{
+		UserSub:  "user1",
+		ClientID: "default",
+	})
+
+	form := strings.NewReader("grant_type=refresh_token&refresh_token=rt1&client_id=default&client_secret=secret")
+	req := httptest.NewRequest("POST", "/token", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	srv.HandleToken(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp["access_token"] == nil || resp["access_token"] == "" {
+		t.Error("expected new access_token")
+	}
+	if resp["refresh_token"] == nil || resp["refresh_token"] == "" {
+		t.Error("expected new refresh_token")
+	}
+	if resp["id_token"] == nil || resp["id_token"] == "" {
+		t.Error("expected new id_token")
+	}
+	if resp["token_type"] != "Bearer" {
+		t.Errorf("expected token_type=Bearer, got %v", resp["token_type"])
+	}
+}
+
+func TestTokenEndpoint_RefreshToken_InvalidToken(t *testing.T) {
+	srv := newTestServer(t)
+
+	form := strings.NewReader("grant_type=refresh_token&refresh_token=bad&client_id=default&client_secret=secret")
+	req := httptest.NewRequest("POST", "/token", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	srv.HandleToken(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestTokenEndpoint_RefreshToken_WrongClient(t *testing.T) {
+	srv := newTestServer(t)
+
+	srv.Config.Clients = append(srv.Config.Clients, Client{
+		ID:     "other",
+		Secret: "other-secret",
+	})
+	srv.Store.SaveRefreshToken("rt1", RefreshTokenData{
+		UserSub:  "user1",
+		ClientID: "default",
+	})
+
+	form := strings.NewReader("grant_type=refresh_token&refresh_token=rt1&client_id=other&client_secret=other-secret")
+	req := httptest.NewRequest("POST", "/token", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	srv.HandleToken(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
 }
 
 func TestTokenEndpoint_InvalidClient(t *testing.T) {

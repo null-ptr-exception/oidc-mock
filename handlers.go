@@ -34,6 +34,7 @@ func (s *Server) HandleDiscovery(w http.ResponseWriter, r *http.Request) {
 		"jwks_uri":                              s.Config.Issuer + "/jwks",
 		"userinfo_endpoint":                     s.Config.Issuer + "/userinfo",
 		"response_types_supported":              []string{"code"},
+		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
 		"subject_types_supported":               []string{"public"},
 		"id_token_signing_alg_values_supported": []string{"RS256"},
 		"scopes_supported":                      []string{"openid", "email", "profile"},
@@ -152,13 +153,6 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	grantType := r.FormValue("grant_type")
-	if grantType != "authorization_code" {
-		jsonError(w, "unsupported_grant_type", http.StatusBadRequest)
-		return
-	}
-
-	code := r.FormValue("code")
-	redirectURI := r.FormValue("redirect_uri")
 
 	clientID, clientSecret, basicOk := r.BasicAuth()
 	if !basicOk {
@@ -172,17 +166,44 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	codeData, ok := s.Store.ConsumeAuthCode(code)
-	if !ok {
-		jsonError(w, "invalid_grant", http.StatusBadRequest)
-		return
-	}
-	if codeData.ClientID != clientID || codeData.RedirectURI != redirectURI {
-		jsonError(w, "invalid_grant", http.StatusBadRequest)
+	var userSub, nonce string
+
+	switch grantType {
+	case "authorization_code":
+		code := r.FormValue("code")
+		redirectURI := r.FormValue("redirect_uri")
+
+		codeData, ok := s.Store.ConsumeAuthCode(code)
+		if !ok {
+			jsonError(w, "invalid_grant", http.StatusBadRequest)
+			return
+		}
+		if codeData.ClientID != clientID || codeData.RedirectURI != redirectURI {
+			jsonError(w, "invalid_grant", http.StatusBadRequest)
+			return
+		}
+		userSub = codeData.UserSub
+		nonce = codeData.Nonce
+
+	case "refresh_token":
+		rt := r.FormValue("refresh_token")
+		rtData, ok := s.Store.GetRefreshToken(rt)
+		if !ok {
+			jsonError(w, "invalid_grant", http.StatusBadRequest)
+			return
+		}
+		if rtData.ClientID != clientID {
+			jsonError(w, "invalid_grant", http.StatusBadRequest)
+			return
+		}
+		userSub = rtData.UserSub
+
+	default:
+		jsonError(w, "unsupported_grant_type", http.StatusBadRequest)
 		return
 	}
 
-	user := s.findUser(codeData.UserSub)
+	user := s.findUser(userSub)
 	if user == nil {
 		jsonError(w, "invalid_grant", http.StatusBadRequest)
 		return
@@ -197,7 +218,7 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 			ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(now),
 		},
-		Nonce:  codeData.Nonce,
+		Nonce:  nonce,
 		Email:  user.Email,
 		Name:   user.Name,
 		Custom: user.Claims,
@@ -212,13 +233,20 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 	accessToken := GenerateRandomString(32)
 	s.Store.SaveAccessToken(accessToken, user.Sub)
 
+	refreshToken := GenerateRandomString(32)
+	s.Store.SaveRefreshToken(refreshToken, RefreshTokenData{
+		UserSub:  user.Sub,
+		ClientID: clientID,
+	})
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	json.NewEncoder(w).Encode(map[string]any{
-		"access_token": accessToken,
-		"token_type":   "Bearer",
-		"expires_in":   3600,
-		"id_token":     idToken,
+		"access_token":  accessToken,
+		"token_type":    "Bearer",
+		"expires_in":    3600,
+		"id_token":      idToken,
+		"refresh_token": refreshToken,
 	})
 }
 
