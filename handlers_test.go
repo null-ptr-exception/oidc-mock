@@ -297,6 +297,11 @@ func TestUserinfoEndpoint(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 
+	ct := w.Header().Get("Content-Type")
+	if ct != "application/json" {
+		t.Errorf("expected Content-Type application/json, got %q", ct)
+	}
+
 	var claims map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &claims); err != nil {
 		t.Fatal(err)
@@ -312,6 +317,82 @@ func TestUserinfoEndpoint(t *testing.T) {
 	}
 }
 
+func TestUserinfoEndpoint_CustomClaims(t *testing.T) {
+	srv := newTestServer(t)
+
+	srv.Store.SaveAccessToken("atok", "user1")
+
+	req := httptest.NewRequest("GET", "/userinfo", nil)
+	req.Header.Set("Authorization", "Bearer atok")
+	w := httptest.NewRecorder()
+
+	srv.HandleUserinfo(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var claims map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &claims); err != nil {
+		t.Fatal(err)
+	}
+
+	roles, ok := claims["roles"]
+	if !ok {
+		t.Fatal("expected custom claim 'roles' in response")
+	}
+	roleList, ok := roles.([]any)
+	if !ok {
+		t.Fatalf("expected roles to be a list, got %T", roles)
+	}
+	if len(roleList) != 1 || roleList[0] != "admin" {
+		t.Errorf("expected roles=[admin], got %v", roleList)
+	}
+}
+
+func TestUserinfoEndpoint_UserNotFound(t *testing.T) {
+	srv := newTestServer(t)
+
+	srv.Store.SaveAccessToken("atok", "nonexistent-user")
+
+	req := httptest.NewRequest("GET", "/userinfo", nil)
+	req.Header.Set("Authorization", "Bearer atok")
+	w := httptest.NewRecorder()
+
+	srv.HandleUserinfo(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+}
+
+func TestUserinfoEndpoint_MalformedAuthHeader(t *testing.T) {
+	srv := newTestServer(t)
+
+	cases := []struct {
+		name string
+		auth string
+	}{
+		{"BasicScheme", "Basic dXNlcjpwYXNz"},
+		{"BearerNoSpace", "Bearertoken"},
+		{"EmptyValue", "Bearer "},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/userinfo", nil)
+			req.Header.Set("Authorization", tc.auth)
+			w := httptest.NewRecorder()
+
+			srv.HandleUserinfo(w, req)
+
+			if w.Code != http.StatusUnauthorized {
+				t.Errorf("expected 401, got %d", w.Code)
+			}
+		})
+	}
+}
+
 func TestUserinfoEndpoint_InvalidToken(t *testing.T) {
 	srv := newTestServer(t)
 
@@ -323,6 +404,11 @@ func TestUserinfoEndpoint_InvalidToken(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", w.Code)
+	}
+
+	wwwAuth := w.Header().Get("WWW-Authenticate")
+	if wwwAuth != `Bearer error="invalid_token"` {
+		t.Errorf("expected WWW-Authenticate with invalid_token error, got %q", wwwAuth)
 	}
 }
 
@@ -336,5 +422,33 @@ func TestUserinfoEndpoint_MissingToken(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", w.Code)
+	}
+
+	wwwAuth := w.Header().Get("WWW-Authenticate")
+	if wwwAuth != "Bearer" {
+		t.Errorf("expected WWW-Authenticate: Bearer, got %q", wwwAuth)
+	}
+}
+
+func TestUserinfoEndpoint_POSTNotSupported(t *testing.T) {
+	srv := newTestServer(t)
+
+	srv.Store.SaveAccessToken("atok", "user1")
+
+	req := httptest.NewRequest("POST", "/userinfo", strings.NewReader("access_token=atok"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	srv.HandleUserinfo(w, req)
+
+	if w.Code == http.StatusOK {
+		t.Run("PostWithFormBody", func(t *testing.T) {
+			if w.Code == http.StatusOK {
+				t.Log("POST with form-encoded access_token returned 200 — handler reads Authorization header only, so POST without Bearer header is rejected")
+			}
+		})
+	}
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for POST without Authorization header, got %d", w.Code)
 	}
 }

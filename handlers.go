@@ -239,6 +239,11 @@ func (s *Server) HandleUserinfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := strings.TrimPrefix(auth, "Bearer ")
+	if token == "" {
+		w.Header().Set("WWW-Authenticate", "Bearer")
+		http.Error(w, "missing bearer token", http.StatusUnauthorized)
+		return
+	}
 
 	sub, ok := s.Store.GetUserByAccessToken(token)
 	if !ok {
