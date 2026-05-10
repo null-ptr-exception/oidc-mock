@@ -125,6 +125,35 @@ func TestAuthorizeEndpoint_RendersPicker(t *testing.T) {
 	}
 }
 
+func TestAuthorizeEndpoint_InvalidResponseType(t *testing.T) {
+	srv := newTestServer(t)
+
+	req := httptest.NewRequest("GET", "/authorize?client_id=default&redirect_uri=http://localhost:8080/callback&response_type=token&scope=openid", nil)
+	w := httptest.NewRecorder()
+
+	srv.HandleAuthorize(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "response_type") {
+		t.Error("expected error message to mention response_type")
+	}
+}
+
+func TestAuthorizeEndpoint_MissingResponseType(t *testing.T) {
+	srv := newTestServer(t)
+
+	req := httptest.NewRequest("GET", "/authorize?client_id=default&redirect_uri=http://localhost:8080/callback&scope=openid", nil)
+	w := httptest.NewRecorder()
+
+	srv.HandleAuthorize(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
 func TestAuthorizeCallback_RedirectsWithCode(t *testing.T) {
 	srv := newTestServer(t)
 

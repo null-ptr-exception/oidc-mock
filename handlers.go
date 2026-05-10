@@ -77,6 +77,12 @@ func (s *Server) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	state := r.URL.Query().Get("state")
 	nonce := r.URL.Query().Get("nonce")
 
+	responseType := r.URL.Query().Get("response_type")
+	if responseType != "code" {
+		http.Error(w, "unsupported response_type: only 'code' is supported", http.StatusBadRequest)
+		return
+	}
+
 	client := s.findClient(clientID)
 	if client == nil {
 		http.Error(w, fmt.Sprintf("unknown client_id: %s", clientID), http.StatusBadRequest)
