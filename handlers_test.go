@@ -192,7 +192,7 @@ func TestTokenEndpoint_ValidExchange(t *testing.T) {
 		ClientID:    "default",
 		RedirectURI: "http://localhost:8080/callback",
 		Nonce:       "nonce1",
-		Scope:       "openid offline_access",
+		Scope:       "openid email profile offline_access",
 		ExpiresAt:   time.Now().Add(60 * time.Second),
 	})
 
@@ -791,5 +791,138 @@ func TestTokenEndpoint_IDToken_ContainsAtHash(t *testing.T) {
 	expectedAtHash := base64.RawURLEncoding.EncodeToString(h[:16])
 	if atHash != expectedAtHash {
 		t.Errorf("at_hash mismatch: got %s, expected %s", atHash, expectedAtHash)
+	}
+}
+
+func TestUserinfoEndpoint_ScopeFiltering_OpenIDOnly(t *testing.T) {
+	srv := newTestServer(t)
+
+	srv.Store.SaveAccessToken("atok", AccessTokenData{UserSub: "user1", Scope: "openid"})
+
+	req := httptest.NewRequest("GET", "/userinfo", nil)
+	req.Header.Set("Authorization", "Bearer atok")
+	w := httptest.NewRecorder()
+
+	srv.HandleUserinfo(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var claims map[string]any
+	json.Unmarshal(w.Body.Bytes(), &claims)
+
+	if claims["sub"] != "user1" {
+		t.Error("expected sub claim")
+	}
+	if claims["email"] != nil {
+		t.Errorf("expected no email with openid-only scope, got %v", claims["email"])
+	}
+	if claims["name"] != nil {
+		t.Errorf("expected no name with openid-only scope, got %v", claims["name"])
+	}
+}
+
+func TestUserinfoEndpoint_ScopeFiltering_EmailScope(t *testing.T) {
+	srv := newTestServer(t)
+
+	srv.Store.SaveAccessToken("atok", AccessTokenData{UserSub: "user1", Scope: "openid email"})
+
+	req := httptest.NewRequest("GET", "/userinfo", nil)
+	req.Header.Set("Authorization", "Bearer atok")
+	w := httptest.NewRecorder()
+
+	srv.HandleUserinfo(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var claims map[string]any
+	json.Unmarshal(w.Body.Bytes(), &claims)
+
+	if claims["sub"] != "user1" {
+		t.Error("expected sub claim")
+	}
+	if claims["email"] != "alice@example.com" {
+		t.Errorf("expected email, got %v", claims["email"])
+	}
+	if claims["name"] != nil {
+		t.Errorf("expected no name with openid+email scope, got %v", claims["name"])
+	}
+}
+
+func TestUserinfoEndpoint_ScopeFiltering_ProfileScope(t *testing.T) {
+	srv := newTestServer(t)
+
+	srv.Store.SaveAccessToken("atok", AccessTokenData{UserSub: "user1", Scope: "openid profile"})
+
+	req := httptest.NewRequest("GET", "/userinfo", nil)
+	req.Header.Set("Authorization", "Bearer atok")
+	w := httptest.NewRecorder()
+
+	srv.HandleUserinfo(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var claims map[string]any
+	json.Unmarshal(w.Body.Bytes(), &claims)
+
+	if claims["sub"] != "user1" {
+		t.Error("expected sub claim")
+	}
+	if claims["name"] != "Alice" {
+		t.Errorf("expected name=Alice, got %v", claims["name"])
+	}
+	if claims["email"] != nil {
+		t.Errorf("expected no email with openid+profile scope, got %v", claims["email"])
+	}
+	if claims["roles"] == nil {
+		t.Error("expected custom claims (roles) with profile scope")
+	}
+}
+
+func TestTokenEndpoint_IDToken_ScopeFiltering(t *testing.T) {
+	srv := newTestServer(t)
+
+	srv.Store.SaveAuthCode("scopecode", AuthCodeData{
+		UserSub:     "user1",
+		ClientID:    "default",
+		RedirectURI: "http://localhost:8080/callback",
+		Nonce:       "n",
+		Scope:       "openid",
+		ExpiresAt:   time.Now().Add(60 * time.Second),
+	})
+
+	form := strings.NewReader("grant_type=authorization_code&code=scopecode&client_id=default&client_secret=secret&redirect_uri=http://localhost:8080/callback")
+	req := httptest.NewRequest("POST", "/token", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	srv.HandleToken(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+
+	idTokenStr := resp["id_token"].(string)
+	parsed, _ := jwt.Parse(idTokenStr, func(token *jwt.Token) (any, error) {
+		return &srv.KeyPair.PrivateKey.PublicKey, nil
+	})
+	claims := parsed.Claims.(jwt.MapClaims)
+
+	if claims["sub"] != "user1" {
+		t.Error("expected sub")
+	}
+	if claims["email"] != nil {
+		t.Errorf("expected no email in id_token with openid-only scope, got %v", claims["email"])
+	}
+	if claims["name"] != nil {
+		t.Errorf("expected no name in id_token with openid-only scope, got %v", claims["name"])
 	}
 }

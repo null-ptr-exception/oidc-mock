@@ -267,10 +267,14 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 			IssuedAt:  jwt.NewNumericDate(now),
 		},
 		Nonce:  nonce,
-		Email:  user.Email,
-		Name:   user.Name,
 		AtHash: atHash,
-		Custom: user.Claims,
+	}
+	if hasScope(scope, "email") {
+		idTokenClaims.Email = user.Email
+	}
+	if hasScope(scope, "profile") {
+		idTokenClaims.Name = user.Name
+		idTokenClaims.Custom = user.Claims
 	}
 
 	idToken, err := s.KeyPair.SignIDToken(idTokenClaims)
@@ -347,12 +351,16 @@ func (s *Server) HandleUserinfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	claims := map[string]any{
-		"sub":   user.Sub,
-		"email": user.Email,
-		"name":  user.Name,
+		"sub": user.Sub,
 	}
-	for k, v := range user.Claims {
-		claims[k] = v
+	if hasScope(data.Scope, "email") {
+		claims["email"] = user.Email
+	}
+	if hasScope(data.Scope, "profile") {
+		claims["name"] = user.Name
+		for k, v := range user.Claims {
+			claims[k] = v
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
