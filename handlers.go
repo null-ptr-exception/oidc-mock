@@ -38,7 +38,7 @@ func (s *Server) HandleDiscovery(w http.ResponseWriter, r *http.Request) {
 		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
 		"subject_types_supported":               []string{"public"},
 		"id_token_signing_alg_values_supported": []string{"RS256"},
-		"scopes_supported":                      []string{"openid", "email", "profile"},
+		"scopes_supported":                      []string{"openid", "email", "profile", "offline_access"},
 		"token_endpoint_auth_methods_supported": []string{"client_secret_basic", "client_secret_post"},
 		"claims_supported":                      []string{"sub", "iss", "aud", "exp", "iat", "nonce", "email", "name"},
 		"code_challenge_methods_supported":      []string{"S256", "plain"},
@@ -273,22 +273,35 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 	accessToken := GenerateRandomString(32)
 	s.Store.SaveAccessToken(accessToken, AccessTokenData{UserSub: user.Sub, Scope: scope})
 
-	refreshToken := GenerateRandomString(32)
-	s.Store.SaveRefreshToken(refreshToken, RefreshTokenData{
-		UserSub:  user.Sub,
-		ClientID: clientID,
-		Scope:    scope,
-	})
+	resp := map[string]any{
+		"access_token": accessToken,
+		"token_type":   "Bearer",
+		"expires_in":   3600,
+		"id_token":     idToken,
+	}
+
+	if hasScope(scope, "offline_access") {
+		refreshToken := GenerateRandomString(32)
+		s.Store.SaveRefreshToken(refreshToken, RefreshTokenData{
+			UserSub:  user.Sub,
+			ClientID: clientID,
+			Scope:    scope,
+		})
+		resp["refresh_token"] = refreshToken
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
-	json.NewEncoder(w).Encode(map[string]any{
-		"access_token":  accessToken,
-		"token_type":    "Bearer",
-		"expires_in":    3600,
-		"id_token":      idToken,
-		"refresh_token": refreshToken,
-	})
+	json.NewEncoder(w).Encode(resp)
+}
+
+func hasScope(scope, target string) bool {
+	for _, s := range strings.Fields(scope) {
+		if s == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) findUser(sub string) *User {

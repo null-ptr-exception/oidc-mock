@@ -188,6 +188,7 @@ func TestTokenEndpoint_ValidExchange(t *testing.T) {
 		ClientID:    "default",
 		RedirectURI: "http://localhost:8080/callback",
 		Nonce:       "nonce1",
+		Scope:       "openid offline_access",
 		ExpiresAt:   time.Now().Add(60 * time.Second),
 	})
 
@@ -226,6 +227,7 @@ func TestTokenEndpoint_RefreshToken(t *testing.T) {
 	srv.Store.SaveRefreshToken("rt1", RefreshTokenData{
 		UserSub:  "user1",
 		ClientID: "default",
+		Scope:    "openid offline_access",
 	})
 
 	form := strings.NewReader("grant_type=refresh_token&refresh_token=rt1&client_id=default&client_secret=secret")
@@ -296,6 +298,68 @@ func TestTokenEndpoint_RefreshToken_WrongClient(t *testing.T) {
 	}
 }
 
+func TestTokenEndpoint_NoRefreshTokenWithoutOfflineAccess(t *testing.T) {
+	srv := newTestServer(t)
+
+	srv.Store.SaveAuthCode("code1", AuthCodeData{
+		UserSub:     "user1",
+		ClientID:    "default",
+		RedirectURI: "http://localhost:8080/callback",
+		Nonce:       "n",
+		Scope:       "openid email profile",
+		ExpiresAt:   time.Now().Add(60 * time.Second),
+	})
+
+	form := strings.NewReader("grant_type=authorization_code&code=code1&client_id=default&client_secret=secret&redirect_uri=http://localhost:8080/callback")
+	req := httptest.NewRequest("POST", "/token", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	srv.HandleToken(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+
+	if resp["refresh_token"] != nil {
+		t.Error("expected no refresh_token without offline_access scope")
+	}
+}
+
+func TestTokenEndpoint_RefreshTokenWithOfflineAccess(t *testing.T) {
+	srv := newTestServer(t)
+
+	srv.Store.SaveAuthCode("code1", AuthCodeData{
+		UserSub:     "user1",
+		ClientID:    "default",
+		RedirectURI: "http://localhost:8080/callback",
+		Nonce:       "n",
+		Scope:       "openid email profile offline_access",
+		ExpiresAt:   time.Now().Add(60 * time.Second),
+	})
+
+	form := strings.NewReader("grant_type=authorization_code&code=code1&client_id=default&client_secret=secret&redirect_uri=http://localhost:8080/callback")
+	req := httptest.NewRequest("POST", "/token", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	srv.HandleToken(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+
+	if resp["refresh_token"] == nil || resp["refresh_token"] == "" {
+		t.Error("expected refresh_token with offline_access scope")
+	}
+}
+
 func TestTokenEndpoint_InvalidClient(t *testing.T) {
 	srv := newTestServer(t)
 
@@ -319,6 +383,7 @@ func TestTokenEndpoint_CodeAlreadyConsumed(t *testing.T) {
 		ClientID:    "default",
 		RedirectURI: "http://localhost:8080/callback",
 		Nonce:       "n",
+		Scope:       "openid",
 		ExpiresAt:   time.Now().Add(60 * time.Second),
 	})
 
@@ -350,6 +415,7 @@ func TestTokenEndpoint_BasicAuth(t *testing.T) {
 		ClientID:    "default",
 		RedirectURI: "http://localhost:8080/callback",
 		Nonce:       "n",
+		Scope:       "openid offline_access",
 		ExpiresAt:   time.Now().Add(60 * time.Second),
 	})
 
