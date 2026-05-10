@@ -941,3 +941,97 @@ func TestTokenEndpoint_IDToken_ScopeFiltering(t *testing.T) {
 		t.Errorf("expected no name in id_token with openid-only scope, got %v", claims["name"])
 	}
 }
+
+func TestRevokeEndpoint_AccessToken(t *testing.T) {
+	srv := newTestServer(t)
+
+	srv.Store.SaveAccessToken("atok", AccessTokenData{UserSub: "user1", Scope: "openid"})
+
+	form := strings.NewReader("token=atok&token_type_hint=access_token")
+	req := httptest.NewRequest("POST", "/revoke", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	srv.HandleRevoke(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+
+	if _, ok := srv.Store.GetAccessToken("atok"); ok {
+		t.Error("expected access token to be revoked")
+	}
+}
+
+func TestRevokeEndpoint_RefreshToken(t *testing.T) {
+	srv := newTestServer(t)
+
+	srv.Store.SaveRefreshToken("rt1", RefreshTokenData{UserSub: "user1", ClientID: "default", Scope: "openid"})
+
+	form := strings.NewReader("token=rt1&token_type_hint=refresh_token")
+	req := httptest.NewRequest("POST", "/revoke", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	srv.HandleRevoke(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+
+	if _, ok := srv.Store.GetRefreshToken("rt1"); ok {
+		t.Error("expected refresh token to be revoked")
+	}
+}
+
+func TestRevokeEndpoint_UnknownToken(t *testing.T) {
+	srv := newTestServer(t)
+
+	form := strings.NewReader("token=nonexistent")
+	req := httptest.NewRequest("POST", "/revoke", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	srv.HandleRevoke(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 even for unknown token, got %d", w.Code)
+	}
+}
+
+func TestEndSessionEndpoint_Redirect(t *testing.T) {
+	srv := newTestServer(t)
+
+	req := httptest.NewRequest("GET", "/end-session?post_logout_redirect_uri=http://localhost:3000/logged-out&state=abc", nil)
+	w := httptest.NewRecorder()
+
+	srv.HandleEndSession(w, req)
+
+	if w.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d", w.Code)
+	}
+
+	loc, err := url.Parse(w.Header().Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loc.String() == "" {
+		t.Fatal("expected Location header")
+	}
+	if loc.Query().Get("state") != "abc" {
+		t.Errorf("expected state=abc in redirect, got %s", loc.Query().Get("state"))
+	}
+}
+
+func TestEndSessionEndpoint_NoRedirect(t *testing.T) {
+	srv := newTestServer(t)
+
+	req := httptest.NewRequest("GET", "/end-session", nil)
+	w := httptest.NewRecorder()
+
+	srv.HandleEndSession(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}

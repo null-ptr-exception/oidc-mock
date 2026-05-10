@@ -36,6 +36,8 @@ func main() {
 	mux.HandleFunc("POST /token", srv.HandleToken)
 	mux.HandleFunc("GET /jwks", srv.HandleJWKS)
 	mux.HandleFunc("GET /userinfo", srv.HandleUserinfo)
+	mux.HandleFunc("POST /revoke", srv.HandleRevoke)
+	mux.HandleFunc("GET /end-session", srv.HandleEndSession)
 
 	addr := fmt.Sprintf(":%d", cfg.Port)
 	cfgYAML, _ := yaml.Marshal(cfg)

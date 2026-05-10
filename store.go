@@ -88,6 +88,18 @@ func (s *Store) GetRefreshToken(token string) (RefreshTokenData, bool) {
 	return data, ok
 }
 
+func (s *Store) RevokeAccessToken(token string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.accessTokens, token)
+}
+
+func (s *Store) RevokeRefreshToken(token string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.refreshTokens, token)
+}
+
 func GenerateRandomString(n int) string {
 	b := make([]byte, n)
 	rand.Read(b)

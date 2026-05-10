@@ -39,6 +39,8 @@ func (s *Server) HandleDiscovery(w http.ResponseWriter, r *http.Request) {
 		"subject_types_supported":               []string{"public"},
 		"id_token_signing_alg_values_supported": []string{"RS256"},
 		"scopes_supported":                      []string{"openid", "email", "profile", "offline_access"},
+		"revocation_endpoint":                   s.Config.Issuer + "/revoke",
+		"end_session_endpoint":                  s.Config.Issuer + "/end-session",
 		"token_endpoint_auth_methods_supported": []string{"client_secret_basic", "client_secret_post"},
 		"claims_supported":                      []string{"sub", "iss", "aud", "exp", "iat", "nonce", "email", "name"},
 		"code_challenge_methods_supported":      []string{"S256", "plain"},
@@ -365,6 +367,55 @@ func (s *Server) HandleUserinfo(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(claims)
+}
+
+func (s *Server) HandleRevoke(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form data", http.StatusBadRequest)
+		return
+	}
+
+	token := r.FormValue("token")
+	if token == "" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	tokenType := r.FormValue("token_type_hint")
+	switch tokenType {
+	case "refresh_token":
+		s.Store.RevokeRefreshToken(token)
+	case "access_token", "":
+		s.Store.RevokeAccessToken(token)
+		s.Store.RevokeRefreshToken(token)
+	default:
+		s.Store.RevokeAccessToken(token)
+		s.Store.RevokeRefreshToken(token)
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) HandleEndSession(w http.ResponseWriter, r *http.Request) {
+	redirectURI := r.URL.Query().Get("post_logout_redirect_uri")
+	if redirectURI == "" {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("logged out"))
+		return
+	}
+
+	state := r.URL.Query().Get("state")
+	u, err := url.Parse(redirectURI)
+	if err != nil {
+		http.Error(w, "invalid post_logout_redirect_uri", http.StatusBadRequest)
+		return
+	}
+	if state != "" {
+		q := u.Query()
+		q.Set("state", state)
+		u.RawQuery = q.Encode()
+	}
+	http.Redirect(w, r, u.String(), http.StatusFound)
 }
 
 func jsonError(w http.ResponseWriter, errCode string, status int) {
