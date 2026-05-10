@@ -2,6 +2,8 @@
 
 Mock OIDC provider for local development. Implements the Authorization Code flow with a user picker instead of a login form.
 
+**Supported features:** PKCE (S256/plain), refresh tokens (`offline_access` scope), scope-based claim filtering (`openid`, `email`, `profile`), `at_hash` in ID tokens.
+
 ## Getting Started
 
 ```console
@@ -42,7 +44,20 @@ Override defaults (see Getting Started) using exactly one of:
 
 Setting more than one is an error. `OIDC_PORT` overrides the port independently.
 
-Any key in a user object beyond `sub`, `email`, and `name` becomes a claim in the ID token and `/userinfo` response.
+Any key in a user object beyond `sub`, `email`, and `name` becomes a custom claim in the ID token and `/userinfo` response (requires `profile` scope).
+
+### Scopes
+
+| Scope | Claims returned |
+|-------|----------------|
+| `openid` | `sub` |
+| `email` | `email` |
+| `profile` | `name` + custom claims |
+| `offline_access` | enables refresh token |
+
+### PKCE
+
+Supported for public clients. Pass `code_challenge` and `code_challenge_method` (`S256` or `plain`) in the authorize request, then `code_verifier` in the token request.
 
 ### docker-compose with inline config
 
