@@ -736,7 +736,7 @@ func TestTokenEndpoint_PKCE_MissingVerifier(t *testing.T) {
 	}
 }
 
-func TestUserinfoEndpoint_POSTNotSupported(t *testing.T) {
+func TestUserinfoEndpoint_POST(t *testing.T) {
 	srv := newTestServer(t)
 
 	srv.Store.SaveAccessToken("atok", AccessTokenData{UserSub: "user1", Scope: "openid email profile"})
@@ -747,15 +747,32 @@ func TestUserinfoEndpoint_POSTNotSupported(t *testing.T) {
 
 	srv.HandleUserinfo(w, req)
 
-	if w.Code == http.StatusOK {
-		t.Run("PostWithFormBody", func(t *testing.T) {
-			if w.Code == http.StatusOK {
-				t.Log("POST with form-encoded access_token returned 200 — handler reads Authorization header only, so POST without Bearer header is rejected")
-			}
-		})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
+
+	var claims map[string]any
+	json.Unmarshal(w.Body.Bytes(), &claims)
+
+	if claims["sub"] != "user1" {
+		t.Errorf("expected sub=user1, got %v", claims["sub"])
+	}
+	if claims["email"] != "alice@example.com" {
+		t.Errorf("expected email, got %v", claims["email"])
+	}
+}
+
+func TestUserinfoEndpoint_POST_NoToken(t *testing.T) {
+	srv := newTestServer(t)
+
+	req := httptest.NewRequest("POST", "/userinfo", strings.NewReader(""))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	srv.HandleUserinfo(w, req)
+
 	if w.Code != http.StatusUnauthorized {
-		t.Errorf("expected 401 for POST without Authorization header, got %d", w.Code)
+		t.Errorf("expected 401, got %d", w.Code)
 	}
 }
 
@@ -861,6 +878,9 @@ func TestUserinfoEndpoint_ScopeFiltering_EmailScope(t *testing.T) {
 	}
 	if claims["email"] != "alice@example.com" {
 		t.Errorf("expected email, got %v", claims["email"])
+	}
+	if claims["email_verified"] != true {
+		t.Errorf("expected email_verified=true, got %v", claims["email_verified"])
 	}
 	if claims["name"] != nil {
 		t.Errorf("expected no name with openid+email scope, got %v", claims["name"])

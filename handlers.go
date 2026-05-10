@@ -42,7 +42,7 @@ func (s *Server) HandleDiscovery(w http.ResponseWriter, r *http.Request) {
 		"revocation_endpoint":                   s.Config.Issuer + "/revoke",
 		"end_session_endpoint":                  s.Config.Issuer + "/end-session",
 		"token_endpoint_auth_methods_supported": []string{"client_secret_basic", "client_secret_post"},
-		"claims_supported":                      []string{"sub", "iss", "aud", "exp", "iat", "nonce", "email", "name"},
+		"claims_supported":                      []string{"sub", "iss", "aud", "exp", "iat", "nonce", "email", "email_verified", "name", "at_hash"},
 		"code_challenge_methods_supported":      []string{"S256", "plain"},
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -273,6 +273,8 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 	}
 	if hasScope(scope, "email") {
 		idTokenClaims.Email = user.Email
+		v := true
+		idTokenClaims.EmailVerified = &v
 	}
 	if hasScope(scope, "profile") {
 		idTokenClaims.Name = user.Name
@@ -290,6 +292,7 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 		"token_type":   "Bearer",
 		"expires_in":   3600,
 		"id_token":     idToken,
+		"scope":        scope,
 	}
 
 	if hasScope(scope, "offline_access") {
@@ -326,13 +329,16 @@ func (s *Server) findUser(sub string) *User {
 }
 
 func (s *Server) HandleUserinfo(w http.ResponseWriter, r *http.Request) {
+	var token string
+
 	auth := r.Header.Get("Authorization")
-	if !strings.HasPrefix(auth, "Bearer ") {
-		w.Header().Set("WWW-Authenticate", "Bearer")
-		http.Error(w, "missing bearer token", http.StatusUnauthorized)
-		return
+	if strings.HasPrefix(auth, "Bearer ") {
+		token = strings.TrimPrefix(auth, "Bearer ")
+	} else if r.Method == http.MethodPost {
+		r.ParseForm()
+		token = r.FormValue("access_token")
 	}
-	token := strings.TrimPrefix(auth, "Bearer ")
+
 	if token == "" {
 		w.Header().Set("WWW-Authenticate", "Bearer")
 		http.Error(w, "missing bearer token", http.StatusUnauthorized)
@@ -357,6 +363,7 @@ func (s *Server) HandleUserinfo(w http.ResponseWriter, r *http.Request) {
 	}
 	if hasScope(data.Scope, "email") {
 		claims["email"] = user.Email
+		claims["email_verified"] = true
 	}
 	if hasScope(data.Scope, "profile") {
 		claims["name"] = user.Name
