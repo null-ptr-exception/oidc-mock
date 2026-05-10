@@ -2,7 +2,7 @@
 
 Mock OIDC provider for local development. Implements the Authorization Code flow with a user picker instead of a login form.
 
-**Supported features:** PKCE (S256/plain), refresh tokens (`offline_access` scope), scope-based claim filtering (`openid`, `email`, `profile`), `at_hash` in ID tokens.
+**Supported features:** PKCE (S256/plain), refresh tokens (`offline_access` scope), scope-based claim filtering, token revocation, RP-Initiated Logout, `at_hash`/`email_verified` claims.
 
 ## Getting Started
 
@@ -58,6 +58,18 @@ Any key in a user object beyond `sub`, `email`, and `name` becomes a custom clai
 ### PKCE
 
 Supported for public clients. Pass `code_challenge` and `code_challenge_method` (`S256` or `plain`) in the authorize request, then `code_verifier` in the token request.
+
+### Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/.well-known/openid-configuration` | GET | Discovery document |
+| `/authorize` | GET | Authorization (shows user picker) |
+| `/token` | POST | Token exchange and refresh |
+| `/userinfo` | GET/POST | User claims (Bearer token or form-encoded) |
+| `/jwks` | GET | JSON Web Key Set |
+| `/revoke` | POST | Token revocation (RFC 7009) |
+| `/end-session` | GET | RP-Initiated Logout |
 
 ### docker-compose with inline config
 
