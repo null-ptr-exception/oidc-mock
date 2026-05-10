@@ -59,6 +59,21 @@ func TestDiscoveryEndpoint(t *testing.T) {
 	if doc["userinfo_endpoint"] != "http://localhost:8080/userinfo" {
 		t.Errorf("unexpected userinfo_endpoint: %v", doc["userinfo_endpoint"])
 	}
+
+	grantTypes := doc["grant_types_supported"].([]any)
+	if len(grantTypes) != 2 || grantTypes[0] != "authorization_code" || grantTypes[1] != "refresh_token" {
+		t.Errorf("unexpected grant_types_supported: %v", grantTypes)
+	}
+
+	challengeMethods := doc["code_challenge_methods_supported"].([]any)
+	if len(challengeMethods) != 2 || challengeMethods[0] != "S256" || challengeMethods[1] != "plain" {
+		t.Errorf("unexpected code_challenge_methods_supported: %v", challengeMethods)
+	}
+
+	scopes := doc["scopes_supported"].([]any)
+	if len(scopes) != 4 {
+		t.Errorf("expected 4 scopes_supported, got %v", scopes)
+	}
 }
 
 func TestJWKSEndpoint(t *testing.T) {
