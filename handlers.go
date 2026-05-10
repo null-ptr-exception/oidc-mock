@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"embed"
 	"encoding/base64"
 	"encoding/json"
@@ -40,6 +41,7 @@ func (s *Server) HandleDiscovery(w http.ResponseWriter, r *http.Request) {
 		"scopes_supported":                      []string{"openid", "email", "profile"},
 		"token_endpoint_auth_methods_supported": []string{"client_secret_basic", "client_secret_post"},
 		"claims_supported":                      []string{"sub", "iss", "aud", "exp", "iat", "nonce", "email", "name"},
+		"code_challenge_methods_supported":      []string{"S256", "plain"},
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(doc)
@@ -64,12 +66,14 @@ func (s *Server) HandleJWKS(w http.ResponseWriter, r *http.Request) {
 }
 
 type pickerData struct {
-	Users       []User
-	ClientID    string
-	RedirectURI string
-	State       string
-	Nonce       string
-	Scope       string
+	Users               []User
+	ClientID            string
+	RedirectURI         string
+	State               string
+	Nonce               string
+	Scope               string
+	CodeChallenge       string
+	CodeChallengeMethod string
 }
 
 func (s *Server) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
@@ -95,14 +99,22 @@ func (s *Server) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	codeChallenge := r.URL.Query().Get("code_challenge")
+	codeChallengeMethod := r.URL.Query().Get("code_challenge_method")
+	if codeChallenge != "" && codeChallengeMethod == "" {
+		codeChallengeMethod = "plain"
+	}
+
 	w.Header().Set("Content-Type", "text/html")
 	pickerTmpl.Execute(w, pickerData{
-		Users:       s.Config.Users,
-		ClientID:    clientID,
-		RedirectURI: redirectURI,
-		State:       state,
-		Nonce:       nonce,
-		Scope:       scope,
+		Users:               s.Config.Users,
+		ClientID:            clientID,
+		RedirectURI:         redirectURI,
+		State:               state,
+		Nonce:               nonce,
+		Scope:               scope,
+		CodeChallenge:       codeChallenge,
+		CodeChallengeMethod: codeChallengeMethod,
 	})
 }
 
@@ -118,15 +130,19 @@ func (s *Server) HandleAuthorizeCallback(w http.ResponseWriter, r *http.Request)
 	state := r.FormValue("state")
 	nonce := r.FormValue("nonce")
 	scope := r.FormValue("scope")
+	codeChallenge := r.FormValue("code_challenge")
+	codeChallengeMethod := r.FormValue("code_challenge_method")
 
 	code := GenerateRandomString(16)
 	s.Store.SaveAuthCode(code, AuthCodeData{
-		UserSub:     sub,
-		ClientID:    clientID,
-		RedirectURI: redirectURI,
-		Nonce:       nonce,
-		Scope:       scope,
-		ExpiresAt:   time.Now().Add(60 * time.Second),
+		UserSub:             sub,
+		ClientID:            clientID,
+		RedirectURI:         redirectURI,
+		Nonce:               nonce,
+		Scope:               scope,
+		CodeChallenge:       codeChallenge,
+		CodeChallengeMethod: codeChallengeMethod,
+		ExpiresAt:           time.Now().Add(60 * time.Second),
 	})
 
 	u, _ := url.Parse(redirectURI)
@@ -192,6 +208,17 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 		if codeData.ClientID != clientID || codeData.RedirectURI != redirectURI {
 			jsonError(w, "invalid_grant", http.StatusBadRequest)
 			return
+		}
+		if codeData.CodeChallenge != "" {
+			codeVerifier := r.FormValue("code_verifier")
+			if codeVerifier == "" {
+				jsonError(w, "invalid_grant", http.StatusBadRequest)
+				return
+			}
+			if !verifyPKCE(codeData.CodeChallenge, codeData.CodeChallengeMethod, codeVerifier) {
+				jsonError(w, "invalid_grant", http.StatusBadRequest)
+				return
+			}
 		}
 		userSub = codeData.UserSub
 		nonce = codeData.Nonce
@@ -317,4 +344,17 @@ func jsonError(w http.ResponseWriter, errCode string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": errCode})
+}
+
+func verifyPKCE(challenge, method, verifier string) bool {
+	switch method {
+	case "S256":
+		h := sha256.Sum256([]byte(verifier))
+		computed := base64.RawURLEncoding.EncodeToString(h[:])
+		return computed == challenge
+	case "plain":
+		return verifier == challenge
+	default:
+		return false
+	}
 }

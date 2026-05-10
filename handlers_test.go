@@ -538,6 +538,119 @@ func TestUserinfoEndpoint_MissingToken(t *testing.T) {
 	}
 }
 
+func TestTokenEndpoint_PKCE_S256(t *testing.T) {
+	srv := newTestServer(t)
+
+	// Known test vector: verifier "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+	// SHA256 = E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
+	verifier := "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+	challenge := "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+
+	srv.Store.SaveAuthCode("pkcecode", AuthCodeData{
+		UserSub:             "user1",
+		ClientID:            "default",
+		RedirectURI:         "http://localhost:8080/callback",
+		Nonce:               "n",
+		Scope:               "openid",
+		CodeChallenge:       challenge,
+		CodeChallengeMethod: "S256",
+		ExpiresAt:           time.Now().Add(60 * time.Second),
+	})
+
+	form := strings.NewReader("grant_type=authorization_code&code=pkcecode&client_id=default&client_secret=secret&redirect_uri=http://localhost:8080/callback&code_verifier=" + verifier)
+	req := httptest.NewRequest("POST", "/token", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	srv.HandleToken(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestTokenEndpoint_PKCE_S256_WrongVerifier(t *testing.T) {
+	srv := newTestServer(t)
+
+	challenge := "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+
+	srv.Store.SaveAuthCode("pkcecode", AuthCodeData{
+		UserSub:             "user1",
+		ClientID:            "default",
+		RedirectURI:         "http://localhost:8080/callback",
+		Nonce:               "n",
+		Scope:               "openid",
+		CodeChallenge:       challenge,
+		CodeChallengeMethod: "S256",
+		ExpiresAt:           time.Now().Add(60 * time.Second),
+	})
+
+	form := strings.NewReader("grant_type=authorization_code&code=pkcecode&client_id=default&client_secret=secret&redirect_uri=http://localhost:8080/callback&code_verifier=wrong-verifier")
+	req := httptest.NewRequest("POST", "/token", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	srv.HandleToken(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestTokenEndpoint_PKCE_Plain(t *testing.T) {
+	srv := newTestServer(t)
+
+	verifier := "plainverifier123"
+
+	srv.Store.SaveAuthCode("pkcecode", AuthCodeData{
+		UserSub:             "user1",
+		ClientID:            "default",
+		RedirectURI:         "http://localhost:8080/callback",
+		Nonce:               "n",
+		Scope:               "openid",
+		CodeChallenge:       verifier,
+		CodeChallengeMethod: "plain",
+		ExpiresAt:           time.Now().Add(60 * time.Second),
+	})
+
+	form := strings.NewReader("grant_type=authorization_code&code=pkcecode&client_id=default&client_secret=secret&redirect_uri=http://localhost:8080/callback&code_verifier=" + verifier)
+	req := httptest.NewRequest("POST", "/token", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	srv.HandleToken(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestTokenEndpoint_PKCE_MissingVerifier(t *testing.T) {
+	srv := newTestServer(t)
+
+	srv.Store.SaveAuthCode("pkcecode", AuthCodeData{
+		UserSub:             "user1",
+		ClientID:            "default",
+		RedirectURI:         "http://localhost:8080/callback",
+		Nonce:               "n",
+		Scope:               "openid",
+		CodeChallenge:       "somechallenge",
+		CodeChallengeMethod: "S256",
+		ExpiresAt:           time.Now().Add(60 * time.Second),
+	})
+
+	form := strings.NewReader("grant_type=authorization_code&code=pkcecode&client_id=default&client_secret=secret&redirect_uri=http://localhost:8080/callback")
+	req := httptest.NewRequest("POST", "/token", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	srv.HandleToken(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
 func TestUserinfoEndpoint_POSTNotSupported(t *testing.T) {
 	srv := newTestServer(t)
 

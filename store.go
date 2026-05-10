@@ -8,12 +8,14 @@ import (
 )
 
 type AuthCodeData struct {
-	UserSub     string
-	ClientID    string
-	RedirectURI string
-	Nonce       string
-	Scope       string
-	ExpiresAt   time.Time
+	UserSub             string
+	ClientID            string
+	RedirectURI         string
+	Nonce               string
+	Scope               string
+	CodeChallenge       string
+	CodeChallengeMethod string
+	ExpiresAt           time.Time
 }
 
 type AccessTokenData struct {

@@ -29,6 +29,8 @@
             <input type="hidden" name="state" value="{{$.State}}">
             <input type="hidden" name="nonce" value="{{$.Nonce}}">
             <input type="hidden" name="scope" value="{{$.Scope}}">
+            <input type="hidden" name="code_challenge" value="{{$.CodeChallenge}}">
+            <input type="hidden" name="code_challenge_method" value="{{$.CodeChallengeMethod}}">
             <button type="submit" class="user-card">
                 <div class="user-name">{{.Name}}</div>
                 <div class="user-email">{{.Email}}</div>
