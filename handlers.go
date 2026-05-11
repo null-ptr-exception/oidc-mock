@@ -389,13 +389,9 @@ func (s *Server) HandleRevoke(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tokenType := r.FormValue("token_type_hint")
-	switch tokenType {
-	case "refresh_token":
+	if tokenType == "refresh_token" {
 		s.Store.RevokeRefreshToken(token)
-	case "access_token", "":
-		s.Store.RevokeAccessToken(token)
-		s.Store.RevokeRefreshToken(token)
-	default:
+	} else {
 		s.Store.RevokeAccessToken(token)
 		s.Store.RevokeRefreshToken(token)
 	}

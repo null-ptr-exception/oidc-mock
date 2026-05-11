@@ -736,6 +736,32 @@ func TestTokenEndpoint_PKCE_MissingVerifier(t *testing.T) {
 	}
 }
 
+func TestTokenEndpoint_PKCE_UnsupportedMethod(t *testing.T) {
+	srv := newTestServer(t)
+
+	srv.Store.SaveAuthCode("pkcecode", AuthCodeData{
+		UserSub:             "user1",
+		ClientID:            "default",
+		RedirectURI:         "http://localhost:8080/callback",
+		Nonce:               "n",
+		Scope:               "openid",
+		CodeChallenge:       "somechallenge",
+		CodeChallengeMethod: "S512",
+		ExpiresAt:           time.Now().Add(60 * time.Second),
+	})
+
+	form := strings.NewReader("grant_type=authorization_code&code=pkcecode&client_id=default&client_secret=secret&redirect_uri=http://localhost:8080/callback&code_verifier=somechallenge")
+	req := httptest.NewRequest("POST", "/token", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	srv.HandleToken(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
 func TestUserinfoEndpoint_POST(t *testing.T) {
 	srv := newTestServer(t)
 
@@ -1016,6 +1042,45 @@ func TestRevokeEndpoint_UnknownToken(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200 even for unknown token, got %d", w.Code)
+	}
+}
+
+func TestRevokeEndpoint_NoHint(t *testing.T) {
+	srv := newTestServer(t)
+
+	srv.Store.SaveAccessToken("atok", AccessTokenData{UserSub: "user1", Scope: "openid"})
+	srv.Store.SaveRefreshToken("atok", RefreshTokenData{UserSub: "user1", ClientID: "default", Scope: "openid"})
+
+	form := strings.NewReader("token=atok")
+	req := httptest.NewRequest("POST", "/revoke", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	srv.HandleRevoke(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+	if _, ok := srv.Store.GetAccessToken("atok"); ok {
+		t.Error("expected access token to be revoked")
+	}
+	if _, ok := srv.Store.GetRefreshToken("atok"); ok {
+		t.Error("expected refresh token to be revoked")
+	}
+}
+
+func TestRevokeEndpoint_EmptyToken(t *testing.T) {
+	srv := newTestServer(t)
+
+	form := strings.NewReader("token=")
+	req := httptest.NewRequest("POST", "/revoke", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	srv.HandleRevoke(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
 	}
 }
 
